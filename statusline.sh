@@ -149,6 +149,11 @@ fi
 # ---------------------------------------------------------------------------
 # 5. Rate limits: 5h/7d window usage, each with a countdown until it resets.
 # ---------------------------------------------------------------------------
+# Round a possibly-float percentage to a whole number ("84.00000001" -> "84").
+fmt_pct() {
+  case "$1" in ''|null) printf '%s' "$1"; return ;; esac
+  awk -v p="$1" 'BEGIN{printf "%.0f", p}' 2>/dev/null
+}
 # Countdown from now until a unix timestamp, English abbrev: "3d4h" / "2h15m" / "42m".
 fmt_countdown() {
   ts="$1"
@@ -166,12 +171,12 @@ fmt_countdown() {
 
 rl_display=""
 if [ -n "$rl_5h_pct" ] && [ "$rl_5h_pct" != "null" ]; then
-  rl_display="5h ${rl_5h_pct}%"
+  rl_display="5h $(fmt_pct "$rl_5h_pct")%"
   cd5=$(fmt_countdown "$rl_5h_reset")
   [ -n "$cd5" ] && rl_display="${rl_display} (${cd5})"
 fi
 if [ -n "$rl_7d_pct" ] && [ "$rl_7d_pct" != "null" ]; then
-  seg="7d ${rl_7d_pct}%"
+  seg="7d $(fmt_pct "$rl_7d_pct")%"
   cd7=$(fmt_countdown "$rl_7d_reset")
   [ -n "$cd7" ] && seg="${seg} (${cd7})"
   if [ -n "$rl_display" ]; then
@@ -231,8 +236,10 @@ if [ "$have_jq" = "1" ]; then
     ' "$FABLE_CACHE" 2>/dev/null)
     if [ -n "$fab" ]; then
       # Only the percent is shown. No countdown (same reset as line 2's 7d) and
-      # no severity marker (the number speaks for itself).
+      # no severity marker (the number speaks for itself). The API returns a
+      # float (e.g. 84.00000000000001), so round to a whole number.
       f_pct=${fab%%|*}
+      f_pct=$(awk -v p="$f_pct" 'BEGIN{printf "%.0f", p}' 2>/dev/null)
       fable_display="fable5 ${f_pct}%"
     fi
   fi
