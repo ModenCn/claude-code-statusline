@@ -2,7 +2,7 @@
 # Claude Code status line (two lines)
 #   line 1: [status light] model | context usage | fable5 weekly-scoped limit %
 #           (fetched from the oauth usage API, cached ~5 min, refreshed async)
-#   line 2: cwd | rate limits (5h/7d overall usage + reset) | refresh timestamp
+#   line 2: session id (cross-session name + short session_id) | cwd | rate limits (5h/7d) | refresh timestamp
 
 input="$(cat)"
 
@@ -19,6 +19,7 @@ if [ "$have_jq" = "1" ]; then
   used_pct=$(printf '%s' "$input" | jq -r '.context_window.used_percentage // empty')
   cost_usd=$(printf '%s' "$input" | jq -r '.cost.total_cost_usd // empty')
   transcript_path=$(printf '%s' "$input" | jq -r '.transcript_path // empty')
+  session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
   rl_5h_pct=$(printf '%s' "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
   rl_5h_reset=$(printf '%s' "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
   rl_7d_pct=$(printf '%s' "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
@@ -39,6 +40,7 @@ else
   used_pct=$(extract_num used_percentage)
   cost_usd=$(extract_num total_cost_usd)
   transcript_path=$(extract_str transcript_path)
+  session_id=$(extract_str session_id)
   # rate_limits: five_hour comes first in the JSON, seven_day second, so the
   # 1st/2nd used_percentage+resets_at matches five_hour/seven_day respectively.
   rl_5h_pct=$(printf '%s' "$input" | grep -o '"used_percentage"[[:space:]]*:[[:space:]]*[0-9.]*' | sed -n '1s/.*: *//p')
@@ -187,6 +189,34 @@ if [ -n "$rl_7d_pct" ] && [ "$rl_7d_pct" != "null" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 5b. Session identity (2026-09-12): cross-session name ("claude-ce", the address
+#     ListAgents / SendMessage use between sessions on this machine) + short
+#     session_id. The name is not in the statusline JSON; Claude Code registers
+#     every live session in ~/.claude/sessions/<pid>.json (fields sessionId /
+#     name / tmux), so look it up by session_id. Falls back to the id alone.
+# ---------------------------------------------------------------------------
+sess_display=""
+if [ -n "$session_id" ] && [ "$session_id" != "null" ]; then
+  short_id=$(printf '%s' "$session_id" | cut -c1-8)
+  sess_name=""
+  if [ "$have_jq" = "1" ]; then
+    for _sf in "$HOME"/.claude/sessions/*.json; do
+      [ -f "$_sf" ] || continue
+      _n=$(jq -r --arg sid "$session_id" 'select(.sessionId == $sid) | .name // empty' "$_sf" 2>/dev/null)
+      if [ -n "$_n" ]; then sess_name="$_n"; break; fi
+    done
+  else
+    _sf=$(grep -l "\"sessionId\":\"$session_id\"" "$HOME"/.claude/sessions/*.json 2>/dev/null | head -n1)
+    [ -n "$_sf" ] && sess_name=$(sed -n 's/.*"name":"\([^"]*\)".*/\1/p' "$_sf" | head -n1)
+  fi
+  if [ -n "$sess_name" ]; then
+    sess_display="${sess_name} ${short_id}"
+  else
+    sess_display="$short_id"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # 6. Refresh timestamp (moment the script runs).
 # ---------------------------------------------------------------------------
 refresh_ts=$(date "+%Y-%m-%d %H:%M:%S")
@@ -252,8 +282,10 @@ DIM="\033[2m"
 RESET="\033[0m"
 
 printf "%s ${DIM}%s | %s | %s${RESET}\n" "$light" "$model_name" "$ctx_display" "$fable_display"
+line2="$dir_display"
+[ -n "$sess_display" ] && line2="${sess_display} | ${line2}"
 if [ -n "$rl_display" ]; then
-  printf "${DIM}%s | %s | %s${RESET}\n" "$dir_display" "$rl_display" "$refresh_ts"
+  printf "${DIM}%s | %s | %s${RESET}\n" "$line2" "$rl_display" "$refresh_ts"
 else
-  printf "${DIM}%s | %s${RESET}\n" "$dir_display" "$refresh_ts"
+  printf "${DIM}%s | %s${RESET}\n" "$line2" "$refresh_ts"
 fi

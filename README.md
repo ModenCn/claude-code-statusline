@@ -3,8 +3,8 @@
 A compact two-line [Claude Code](https://claude.com/claude-code) status line, written in plain Bash.
 
 ```
-🟢 Opus 4.8 (1M context) | ctx 177.3K/1.0M (18%) | fable5 82%
-   ~ | 5h 1% (2h54m) · 7d 46% (1d4h) | 2026-07-06 18:45:20
+🟢 Fable 5.1 | ctx 177.3K/1.0M (18%) | fable5 82%
+   claude-ce 507fa58e | ~ | 5h 1% (2h54m) · 7d 46% (1d4h) | 2026-09-12 22:49:18
 ```
 
 ## What it shows
@@ -16,8 +16,9 @@ A compact two-line [Claude Code](https://claude.com/claude-code) status line, wr
 - **Context usage** — used tokens / window size and percentage, e.g. `ctx 177.3K/1.0M (18%)`.
 - **fable5** — the **per-model weekly limit** for Fable 5. Claude Code's status-line input only exposes the *overall* 5h/7d buckets, not the per-model cap, so this is fetched separately from the OAuth usage API (see below). Shows `fable5 n/a` when unavailable.
 
-**Line 2** — `cwd | rate limits | refresh timestamp`
+**Line 2** — `session | cwd | rate limits | refresh timestamp`
 
+- **Session** — the cross-session name Claude Code gives this session (`claude-ce`, the address other sessions on the machine use with `ListAgents` / `SendMessage`) plus the first 8 characters of `session_id`. The name is not part of the status-line JSON; Claude Code registers each live session in `~/.claude/sessions/<pid>.json` (`sessionId` / `name`), so the script looks it up there by `session_id` and falls back to the short id alone.
 - **cwd** — current directory basename (`~` for `$HOME`).
 - **Rate limits** — overall `5h` and `7d` usage with an English countdown to reset, e.g. `5h 1% (2h54m) · 7d 46% (1d4h)`.
 - **Refresh timestamp** — the moment the line was last rendered.
